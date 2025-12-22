@@ -1,0 +1,23 @@
+Introduction to Vector Embeddings
+
+Vector embeddings are numerical representations of data that capture semantic meaning. In natural language processing, word embeddings represent words as dense vectors in a continuous vector space, where semantically similar words are mapped to nearby points.
+
+The most common embedding models include Word2Vec, GloVe, and more recently, transformer-based models like BERT and its variants. These models learn to represent text in a way that preserves semantic relationships.
+
+Applications of Embeddings
+
+Embeddings are widely used in various applications:
+
+1. Semantic Search: Finding documents based on meaning rather than exact keyword matches.
+
+2. Recommendation Systems: Suggesting similar items based on embedding similarity.
+
+3. Text Classification: Using embeddings as features for machine learning classifiers.
+
+4. Retrieval Augmented Generation (RAG): Combining embedding-based retrieval with large language models to provide accurate, contextual responses.
+
+Technical Details
+
+The MiniLM model used in this project produces 384-dimensional vectors. These vectors can be compared using cosine similarity to find semantically related text chunks.
+
+The chunking strategy is important for effective retrieval. Chunks should be small enough to be specific but large enough to contain meaningful context. Overlapping chunks help ensure that important information isn't split across chunk boundaries.
