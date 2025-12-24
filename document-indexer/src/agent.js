@@ -2,7 +2,7 @@
  * agent.js - RAG agent logic
  */
 
-import { searchByText } from './searcher.js';
+import { searchByText, DEFAULT_THRESHOLD } from './searcher.js';
 import { generateEmbedding } from './embedder.js';
 import { createStreamingCompletion } from './openai-client.js';
 
@@ -33,19 +33,25 @@ function formatContext(results) {
 }
 
 /**
- * Answers a question using RAG
+ * Answers a question using RAG with relevance filtering
  * @param {string} question - User question
  * @param {Object} index - Document index
  * @param {Object} options - Options
- * @param {number} options.topK - Number of context chunks (default: 3)
+ * @param {number} options.topK - Number of context chunks to retrieve (default: 5)
+ * @param {number} options.threshold - Minimum similarity threshold (default: 0.3)
  * @param {Function} options.onChunk - Streaming callback
- * @returns {Promise<{answer: string, context: Array}>}
+ * @returns {Promise<{answer: string, context: Array, stats: Object}>}
  */
 export async function answerWithRAG(question, index, options = {}) {
-  const { topK = 3, onChunk } = options;
+  const { topK = 5, threshold = DEFAULT_THRESHOLD, onChunk } = options;
 
-  // Search for relevant context
-  const searchResults = await searchByText(index, question, generateEmbedding, topK);
+  // Search for relevant context with filtering
+  const { results: searchResults, stats } = await searchByText(
+    index,
+    question,
+    generateEmbedding,
+    { topK, threshold }
+  );
 
   // Format context for the prompt
   const context = formatContext(searchResults);
@@ -64,7 +70,8 @@ export async function answerWithRAG(question, index, options = {}) {
 
   return {
     answer,
-    context: searchResults
+    context: searchResults,
+    stats
   };
 }
 

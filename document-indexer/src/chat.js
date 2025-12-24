@@ -7,6 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { loadIndex } from './indexer.js';
 import { answerWithRAG, answerWithoutRAG } from './agent.js';
+import { DEFAULT_THRESHOLD } from './searcher.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,20 +18,23 @@ const INDEX_PATH = path.join(__dirname, '..', 'output', 'index.json');
 // Chat state
 let ragMode = false;
 let index = null;
+let threshold = DEFAULT_THRESHOLD;
 
 /**
  * Prints help message
  */
 function printHelp() {
+  const thresholdDisplay = threshold > 0 ? `${(threshold * 100).toFixed(0)}%` : 'off';
   console.log(`
 Commands:
-  /rag     - Enable RAG mode (use document context)
-  /norag   - Disable RAG mode (direct answers)
-  /status  - Show current mode
-  /help    - Show this help
-  /quit    - Exit chat
+  /rag          - Enable RAG mode (use document context)
+  /norag        - Disable RAG mode (direct answers)
+  /threshold N  - Set relevance threshold (0-100, 0=off)
+  /status       - Show current mode and settings
+  /help         - Show this help
+  /quit         - Exit chat
 
-Current mode: ${ragMode ? 'RAG (with context)' : 'No RAG (direct)'}
+Current: ${ragMode ? 'RAG' : 'Direct'}, threshold: ${thresholdDisplay}
 `);
 }
 
@@ -48,7 +52,8 @@ async function handleInput(input, rl) {
 
   // Handle commands
   if (trimmed.startsWith('/')) {
-    const command = trimmed.toLowerCase();
+    const parts = trimmed.toLowerCase().split(/\s+/);
+    const command = parts[0];
 
     switch (command) {
       case '/rag':
@@ -66,8 +71,32 @@ async function handleInput(input, rl) {
         console.log('\nRAG mode disabled. Direct answers without context.\n');
         return;
 
-      case '/status':
+      case '/threshold': {
+        const value = parts[1];
+        if (value === undefined) {
+          const display = threshold > 0 ? `${(threshold * 100).toFixed(0)}%` : 'off';
+          console.log(`\nCurrent threshold: ${display}`);
+          console.log('Usage: /threshold N (0-100, 0=off)\n');
+          return;
+        }
+        const num = parseInt(value, 10);
+        if (isNaN(num) || num < 0 || num > 100) {
+          console.log('\nInvalid threshold. Use a number between 0 and 100.\n');
+          return;
+        }
+        threshold = num / 100;
+        if (threshold === 0) {
+          console.log('\nThreshold disabled. All results will be used.\n');
+        } else {
+          console.log(`\nThreshold set to ${num}%. Results below this will be filtered.\n`);
+        }
+        return;
+      }
+
+      case '/status': {
+        const thresholdDisplay = threshold > 0 ? `${(threshold * 100).toFixed(0)}%` : 'off';
         console.log(`\nMode: ${ragMode ? 'RAG (with context)' : 'No RAG (direct)'}`);
+        console.log(`Threshold: ${thresholdDisplay}`);
         if (index) {
           console.log(`Index: ${index.metadata.totalChunks} chunks from ${index.metadata.model}`);
         } else {
@@ -75,6 +104,7 @@ async function handleInput(input, rl) {
         }
         console.log();
         return;
+      }
 
       case '/help':
         printHelp();
@@ -100,11 +130,17 @@ async function handleInput(input, rl) {
 
   try {
     if (ragMode && index) {
-      const { answer, context } = await answerWithRAG(trimmed, index, {
+      const { answer, context, stats } = await answerWithRAG(trimmed, index, {
+        threshold,
         onChunk: (chunk) => process.stdout.write(chunk)
       });
 
       console.log('\n');
+
+      // Show filtering stats
+      if (stats.filtered > 0) {
+        console.log(`[Filtered: ${stats.filtered} chunk(s) below ${(stats.threshold * 100).toFixed(0)}% threshold]`);
+      }
 
       // Show sources
       if (context.length > 0) {
@@ -113,6 +149,8 @@ async function handleInput(input, rl) {
           console.log(`  ${i + 1}. ${c.source.filename} (chunk ${c.source.chunkIndex}) - ${(c.score * 100).toFixed(1)}% relevance`);
         });
         console.log();
+      } else {
+        console.log('[No relevant context found - answering based on general knowledge]\n');
       }
     } else {
       await answerWithoutRAG(trimmed, {
