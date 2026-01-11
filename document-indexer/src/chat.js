@@ -19,6 +19,7 @@ const INDEX_PATH = path.join(__dirname, '..', 'output', 'index.json');
 let ragMode = false;
 let index = null;
 let threshold = DEFAULT_THRESHOLD;
+let conversationHistory = [];
 
 /**
  * Prints help message
@@ -30,11 +31,12 @@ Commands:
   /rag          - Enable RAG mode (use document context)
   /norag        - Disable RAG mode (direct answers)
   /threshold N  - Set relevance threshold (0-100, 0=off)
+  /clear        - Clear conversation history
   /status       - Show current mode and settings
   /help         - Show this help
   /quit         - Exit chat
 
-Current: ${ragMode ? 'RAG' : 'Direct'}, threshold: ${thresholdDisplay}
+Current: ${ragMode ? 'RAG' : 'Direct'}, threshold: ${thresholdDisplay}, history: ${conversationHistory.length} messages
 `);
 }
 
@@ -93,10 +95,16 @@ async function handleInput(input, rl) {
         return;
       }
 
+      case '/clear':
+        conversationHistory = [];
+        console.log('\nConversation history cleared.\n');
+        return;
+
       case '/status': {
         const thresholdDisplay = threshold > 0 ? `${(threshold * 100).toFixed(0)}%` : 'off';
         console.log(`\nMode: ${ragMode ? 'RAG (with context)' : 'No RAG (direct)'}`);
         console.log(`Threshold: ${thresholdDisplay}`);
+        console.log(`History: ${conversationHistory.length} messages`);
         if (index) {
           console.log(`Index: ${index.metadata.totalChunks} chunks from ${index.metadata.model}`);
         } else {
@@ -132,8 +140,13 @@ async function handleInput(input, rl) {
     if (ragMode && index) {
       const { answer, context, stats } = await answerWithRAG(trimmed, index, {
         threshold,
+        history: conversationHistory,
         onChunk: (chunk) => process.stdout.write(chunk)
       });
+
+      // Save to conversation history
+      conversationHistory.push({ role: 'user', content: trimmed });
+      conversationHistory.push({ role: 'assistant', content: answer });
 
       console.log('\n');
 
@@ -153,9 +166,15 @@ async function handleInput(input, rl) {
         console.log('[No relevant context found - answering based on general knowledge]\n');
       }
     } else {
-      await answerWithoutRAG(trimmed, {
+      const answer = await answerWithoutRAG(trimmed, {
+        history: conversationHistory,
         onChunk: (chunk) => process.stdout.write(chunk)
       });
+
+      // Save to conversation history
+      conversationHistory.push({ role: 'user', content: trimmed });
+      conversationHistory.push({ role: 'assistant', content: answer });
+
       console.log('\n');
     }
   } catch (error) {

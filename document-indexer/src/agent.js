@@ -39,11 +39,12 @@ function formatContext(results) {
  * @param {Object} options - Options
  * @param {number} options.topK - Number of context chunks to retrieve (default: 5)
  * @param {number} options.threshold - Minimum similarity threshold (default: 0.3)
+ * @param {Array} options.history - Conversation history
  * @param {Function} options.onChunk - Streaming callback
  * @returns {Promise<{answer: string, context: Array, stats: Object}>}
  */
 export async function answerWithRAG(question, index, options = {}) {
-  const { topK = 5, threshold = DEFAULT_THRESHOLD, onChunk } = options;
+  const { topK = 5, threshold = DEFAULT_THRESHOLD, history = [], onChunk } = options;
 
   // Search for relevant context with filtering
   const { results: searchResults, stats } = await searchByText(
@@ -56,9 +57,10 @@ export async function answerWithRAG(question, index, options = {}) {
   // Format context for the prompt
   const context = formatContext(searchResults);
 
-  // Build messages
+  // Build messages with history
   const messages = [
     { role: 'system', content: RAG_SYSTEM_PROMPT },
+    ...history,
     {
       role: 'user',
       content: `Context:\n${context}\n\n---\n\nQuestion: ${question}`
@@ -79,14 +81,16 @@ export async function answerWithRAG(question, index, options = {}) {
  * Answers a question without RAG
  * @param {string} question - User question
  * @param {Object} options - Options
+ * @param {Array} options.history - Conversation history
  * @param {Function} options.onChunk - Streaming callback
  * @returns {Promise<string>}
  */
 export async function answerWithoutRAG(question, options = {}) {
-  const { onChunk } = options;
+  const { history = [], onChunk } = options;
 
   const messages = [
     { role: 'system', content: DEFAULT_SYSTEM_PROMPT },
+    ...history,
     { role: 'user', content: question }
   ];
 
